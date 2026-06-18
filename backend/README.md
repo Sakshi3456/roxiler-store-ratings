@@ -1,64 +1,147 @@
-# Roxiler Backend — NestJS + PostgreSQL
+# Roxiler Store Ratings Platform
 
-## Stack
-- NestJS (Express platform)
-- TypeORM + PostgreSQL
-- JWT auth via Passport
-- class-validator for request validation
-- bcrypt for password hashing
+A full-stack store rating platform built for the Roxiler Systems recruitment assignment.
 
-## Setup
+**Stack:** NestJS · React · PostgreSQL · TypeORM · JWT · Tailwind CSS
 
-```bash
-cd backend
-npm install
-cp .env.example .env
-# edit .env with your local Postgres credentials
-```
+---
 
-Create the database (Postgres must be running locally, or point DB_HOST at a hosted instance):
+## 🚀 Quick Start (Get it running in 5 minutes)
 
+### Prerequisites
+- Node.js 18+
+- PostgreSQL running locally
+
+### 1. Database Setup
+Open pgAdmin or psql and run:
 ```sql
 CREATE DATABASE roxiler_db;
 ```
 
-Start the server (auto-creates tables via `synchronize: true`):
+### 2. Backend
+```bash
+cd backend
+npm install
+cp .env.example .env
+```
 
+Edit `.env` with your Postgres password, then:
 ```bash
 npm run start:dev
 ```
 
-Create the first admin account so you have something to log in with:
-
+### 3. Seed Test Accounts
 ```bash
 npm run seed
 ```
 
-This logs the admin email/password to the console (defaults come from `.env`).
+This creates ready-to-use accounts for all three roles:
 
-## API overview
+| Role | Email | Password |
+|---|---|---|
+| Admin | admin@roxiler.test | Admin@1234 |
+| Normal User | user@roxiler.com | User@1234 |
+| Store Owner | owner@roxiler.com | Owner@1234 |
 
-| Method | Route | Role | Purpose |
+### 4. Frontend
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open **http://localhost:5173** — log in with any account above.
+
+---
+
+## ✨ Features
+
+### System Administrator
+- Dashboard with live counts — total users, stores, ratings
+- Add users (any role) and stores
+- Sortable, filterable tables for users and stores
+- User detail view — shows store rating if the user is a store owner
+
+### Normal User
+- Self-registration with full validation
+- Browse and search stores by name or address
+- Submit star ratings (1–5) per store
+- Modify existing ratings
+- Change password
+
+### Store Owner
+- Dashboard showing all raters and individual ratings
+- Average rating displayed prominently
+- Change password
+
+---
+
+## 🏗️ Architecture & Design Decisions
+
+**Role-based access control** is enforced via a single reusable `RolesGuard` + `@Roles()` decorator, not inline `req.user.role` checks in every handler — clean, scalable, easy to extend.
+
+**One rating per user per store** is enforced at the database level with a `@Unique(['user', 'store'])` TypeORM constraint. Re-submitting a rating updates the existing row instead of creating a duplicate — no application-level workarounds needed.
+
+**Validation is field-specific** — separate checks for uppercase vs special character in passwords, so the frontend can display precise inline errors rather than a generic "invalid input" message.
+
+**Case-insensitive search** uses PostgreSQL's `ILIKE` operator throughout — no need for client-side filtering or lowercasing.
+
+**Self-registration only creates normal users** — admins and store owners can only be created by an existing admin, matching the spec exactly.
+
+---
+
+## 📁 Project Structure
+
+```
+roxiler-store-ratings/
+├── backend/                  # NestJS API
+│   └── src/
+│       ├── admin/            # Admin endpoints
+│       ├── auth/             # JWT auth, guards, decorators
+│       ├── ratings/          # Rating submit/update logic
+│       ├── store-owner/      # Store owner dashboard
+│       ├── stores/           # Store CRUD + search
+│       └── users/            # User management
+└── frontend/                 # React + Vite + Tailwind
+    └── src/
+        ├── components/       # DataTable, Navbar, RatingStars, etc.
+        ├── context/          # AuthContext (JWT + role state)
+        └── pages/
+            ├── admin/        # Dashboard, Users, Stores, AddUser
+            ├── owner/        # OwnerDashboard
+            └── user/         # StoreList with star ratings
+```
+
+---
+
+## 🔐 API Reference
+
+| Method | Route | Access | Description |
 |---|---|---|---|
-| POST | /auth/register | public | Normal user signup |
-| POST | /auth/login | public | Returns JWT |
-| PATCH | /auth/update-password | any logged in | Change own password |
-| POST | /admin/users | ADMIN | Create user/admin/store owner |
-| GET | /admin/users | ADMIN | List + filter (name/email/address/role) + sort |
-| GET | /admin/users/:id | ADMIN | User detail (includes rating if store owner) |
-| POST | /admin/stores | ADMIN | Create store, optionally link an owner |
-| GET | /admin/stores | ADMIN | List + filter + sort, includes avg rating |
-| GET | /admin/dashboard | ADMIN | totalUsers / totalStores / totalRatings |
-| GET | /stores | USER | Browse/search stores, own rating included |
-| POST | /stores/:id/rating | USER | Submit or update a rating (1–5) |
-| GET | /store-owner/dashboard | STORE_OWNER | Raters list + average rating |
+| POST | /auth/register | Public | Normal user signup |
+| POST | /auth/login | Public | Returns JWT |
+| PATCH | /auth/update-password | Any | Change own password |
+| GET | /admin/dashboard | Admin | Total users/stores/ratings |
+| POST | /admin/users | Admin | Create any role user |
+| GET | /admin/users | Admin | List + filter + sort |
+| GET | /admin/users/:id | Admin | User detail with rating |
+| POST | /admin/stores | Admin | Create store |
+| GET | /admin/stores | Admin | List + filter + sort |
+| GET | /stores | User | Browse + search stores |
+| POST | /stores/:id/rating | User | Submit or update rating |
+| GET | /store-owner/dashboard | Store Owner | Raters + avg rating |
 
 All protected routes require `Authorization: Bearer <token>`.
 
-## Design notes (worth mentioning if asked in a review)
+---
 
-- **Role-based access** is enforced with a single reusable `RolesGuard` + `@Roles()` decorator rather than checking `req.user.role` inside every handler — same idea as Spring Security's method-level `@PreAuthorize`.
-- **One rating per (user, store)** is enforced at the database level with a TypeORM `@Unique(['user','store'])` constraint, not just in application logic — submitting again updates the existing row instead of creating a duplicate.
-- **Validation messages are field-specific** (e.g. separate checks for uppercase vs. special character in passwords) so the frontend can show precise errors instead of a generic "invalid input."
-- **`ILIKE` is Postgres-specific** for case-insensitive search/filtering. If you switch to MySQL, replace `ILIKE` with `LIKE` (and consider a case-insensitive collation) in `users.service.ts` and `stores.service.ts`.
-- Self-registration (`/auth/register`) can only ever create a normal `USER` — admins and store owners can only be created by an existing admin, matching the spec.
+## ✅ Validation Rules
+
+| Field | Rule |
+|---|---|
+| Name | 20–60 characters |
+| Address | Max 400 characters |
+| Password | 8–16 chars, 1 uppercase, 1 special character |
+| Email | Standard email format |
+
+Enforced on both frontend (React) and backend (class-validator DTOs).
